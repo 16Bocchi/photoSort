@@ -3,6 +3,7 @@ from datetime import datetime
 from tkinter import filedialog
 import tkinter as tk
 import shutil
+from PIL import Image
 
 isSplit = True
 
@@ -30,8 +31,11 @@ def selectDest():
 
 
 def getDate(filePath):
-    timeStamp = os.path.getctime(filePath)
-    return datetime.fromtimestamp(timeStamp).strftime('%Y-%m-%d')
+    im = Image.open(filePath)
+    exifData = im.getexif()
+    createDate = exifData.get(36867)
+    if createDate:
+        return datetime.strptime(createDate, '%Y:%m:%d')
 
 
 def moveItems(src, dest, split):
@@ -42,7 +46,9 @@ def moveItems(src, dest, split):
                 filePath = os.path.join(root, file)
                 createDate = getDate(filePath)
                 if createDate:
-                    year, month, day = createDate.split('-')
+                    year = createDate.strftime('%Y')
+                    month = createDate.strftime('%m')
+                    day = createDate.strftime('%d')
                     if 'raf' in file.lower():
                         destDir = os.path.join(dest, year, month, day, 'raw')
                     else:
@@ -51,7 +57,7 @@ def moveItems(src, dest, split):
                     shutil.copy(filePath, os.path.join(destDir, file))
                 else:
                     destDir = os.path.join(dest, "noDate")
-                    os.makedirs(os.path.dirname(destDir), exist_ok=True)
+                    os.makedirs(destDir, exist_ok=True)
                     shutil.copy(filePath, os.path.join(destDir, file))
     else:
         print('Moving Both')
@@ -60,13 +66,15 @@ def moveItems(src, dest, split):
                 filePath = os.path.join(root, file)
                 createDate = getDate(filePath)
                 if createDate:
-                    year, month, day = createDate.split('-')
+                    year = createDate.strftime('%Y')
+                    month = createDate.strftime('%m')
+                    day = createDate.strftime('%d')
                     destDir = os.path.join(dest, year, month, day)
                     os.makedirs(destDir, exist_ok=True)
                     shutil.copy(filePath, os.path.join(destDir, file))
                 else:
                     destDir = os.path.join(dest, "noDame")
-                    os.makedirs(os.path.dirname(destDir), exist_ok=True)
+                    os.makedirs(destDir, exist_ok=True)
                     shutil.copy(filePath, os.path.join(destDir, file))
 
 
