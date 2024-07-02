@@ -3,7 +3,7 @@ from datetime import datetime
 from tkinter import filedialog
 import tkinter as tk
 import shutil
-from PIL import Image
+import exiftool
 
 isSplit = True
 
@@ -31,11 +31,10 @@ def selectDest():
 
 
 def getDate(filePath):
-    im = Image.open(filePath)
-    exifData = im.getexif()
-    createDate = exifData.get(36867)
-    if createDate:
-        return datetime.strptime(createDate, '%Y:%m:%d')
+    with exiftool.ExifTool() as et:
+        metadata = et.get_metadata(filePath)
+        for d in metadata:
+            return datetime.strptime(d['EXIF:DateTimeOriginal'], '%Y:%m:%d %H:%M:%S')
 
 
 def moveItems(src, dest, split):
