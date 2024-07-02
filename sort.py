@@ -2,8 +2,11 @@ import os
 from datetime import datetime
 from tkinter import filedialog
 import tkinter as tk
+from tkinter import ttk
 import shutil
 import exiftool
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 isSplit = True
 
@@ -31,50 +34,69 @@ def selectDest():
 
 
 def getDate(filePath):
-    with exiftool.ExifTool() as et:
-        metadata = et.get_metadata(filePath)
-        for d in metadata:
-            return datetime.strptime(d['EXIF:DateTimeOriginal'], '%Y:%m:%d %H:%M:%S')
+    if not os.path.isfile(filePath):
+        raise ValueError(f"File not found: {filePath}")
+
+    try:
+        with exiftool.ExifToolHelper() as et:
+            metadata = et.get_metadata(filePath)
+            for d in metadata:
+                if 'EXIF:DateTimeOriginal' in d:
+                    return datetime.strptime(d['EXIF:DateTimeOriginal'], '%Y:%m:%d %H:%M:%S')
+        return None
+    except Exception as e:
+        print(f"Error reading EXIF data from {filePath}: {e}")
+        return None
 
 
-def moveItems(src, dest, split):
-    if split:
-        print('Moving Raws')
-        for root, dirs, files in os.walk(src):
-            for file in files:
-                filePath = os.path.join(root, file)
-                createDate = getDate(filePath)
-                if createDate:
-                    year = createDate.strftime('%Y')
-                    month = createDate.strftime('%m')
-                    day = createDate.strftime('%d')
-                    if 'raf' in file.lower():
-                        destDir = os.path.join(dest, year, month, day, 'raw')
-                    else:
-                        destDir = os.path.join(dest, year, month, day, 'jpeg')
-                    os.makedirs(destDir, exist_ok=True)
-                    shutil.copy(filePath, os.path.join(destDir, file))
-                else:
-                    destDir = os.path.join(dest, "noDate")
-                    os.makedirs(destDir, exist_ok=True)
-                    shutil.copy(filePath, os.path.join(destDir, file))
+def procFile(filePath, dest, split, updateProg):
+    createDate = getDate(filePath)
+    if createDate:
+        year = createDate.strftime('%Y')
+        month = createDate.strftime('%m')
+        day = createDate.strftime('%d')
+        if split:
+            if 'raf' in filePath.lower():
+                destDir = os.path.join(dest, year, month, day, 'raw')
+            else:
+                destDir = os.path.join(dest, year, month, day, 'jpeg')
+        else:
+            destDir = os.path.join(dest, year, month, day)
     else:
-        print('Moving Both')
-        for root, dirs, files in os.walk(src):
+        destDir = os.path.join(dest, "noDate")
+    os.makedirs(destDir, exist_ok=True)
+    shutil.copy(filePath, os.path.join(destDir, os.path.basename(filePath)))
+    updateProg()
+
+
+def moveItems(src, dest, split, statusLabel, progress):
+    statusLabel.config(text='Moving...')
+    totalFiles = sum([len(files) for _, _, files in os.walk(src)])
+    progress['maximum'] = totalFiles
+    progress['value'] = 0
+
+    def updateProg():
+        progress['value'] += 1
+        window.update_idletasks()
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = []
+        for root, _, files in os.walk(src):
             for file in files:
                 filePath = os.path.join(root, file)
-                createDate = getDate(filePath)
-                if createDate:
-                    year = createDate.strftime('%Y')
-                    month = createDate.strftime('%m')
-                    day = createDate.strftime('%d')
-                    destDir = os.path.join(dest, year, month, day)
-                    os.makedirs(destDir, exist_ok=True)
-                    shutil.copy(filePath, os.path.join(destDir, file))
-                else:
-                    destDir = os.path.join(dest, "noDame")
-                    os.makedirs(destDir, exist_ok=True)
-                    shutil.copy(filePath, os.path.join(destDir, file))
+                futures.append(executor.submit(
+                    procFile, filePath, dest, split, updateProg))
+        for future in futures:
+            future.result()
+
+    print('Done')
+    statusLabel.config(text='Done')
+
+
+def startMoveItems(src, dest, split, statusLabel):
+    statusLabel.config(text='Starting')
+    threading.Thread(target=moveItems, args=(
+        src, dest, split, statusLabel, progress)).start()
 
 
 window = tk.Tk()
@@ -87,7 +109,14 @@ destBut.pack()
 splitBut = tk.Button(window, text="Separate Raws", command=splitRaw)
 splitBut.pack()
 
-goBut = tk.Button(window, text='Sort Files',
-                  command=lambda: moveItems(srcPath, destPath, isSplit))
+goBut = tk.Button(window, text='Sort Files', command=lambda: startMoveItems(
+    srcPath, destPath, isSplit, statusLabel))
 goBut.pack()
+
+statusLabel = tk.Label(window, text='Waiting...')
+statusLabel.pack()
+
+progress = tk.ttk.Progressbar(
+    window, orient='horizontal', mode='determinate')
+progress.pack(fill=tk.X, padx=10, pady=10)
 window.mainloop()
