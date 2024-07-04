@@ -1,8 +1,6 @@
 import os
 from datetime import datetime
-from tkinter import filedialog
 import tkinter as tk
-from tkinter import ttk
 import shutil
 import exiftool
 import threading
