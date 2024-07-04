@@ -65,13 +65,14 @@ def procFile(filePath, dest, split, updateProg):
     else:
         destDir = os.path.join(dest, "noDate")
     os.makedirs(destDir, exist_ok=True)
-    shutil.copy(filePath, os.path.join(destDir, os.path.basename(filePath)))
+    shutil.move(filePath, os.path.join(destDir, os.path.basename(filePath)))
     updateProg()
 
 
 def moveItems(src, dest, split, statusLabel, progress):
     statusLabel.config(text='Moving...')
     totalFiles = sum([len(files) for _, _, files in os.walk(src)])
+    print(f'Total files: {totalFiles}')
     progress['maximum'] = totalFiles
     progress['value'] = 0
 
@@ -81,7 +82,8 @@ def moveItems(src, dest, split, statusLabel, progress):
 
     with ThreadPoolExecutor(max_workers=4) as executor:
         futures = []
-        for root, _, files in os.walk(src):
+        for root, dirs, files in os.walk(src):
+            print(f'Processing {root} with {len(files)} files')
             for file in files:
                 filePath = os.path.join(root, file)
                 futures.append(executor.submit(
